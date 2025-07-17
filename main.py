@@ -1,35 +1,22 @@
-from typing import Union, Optional
+'''--------------------------------------------'''
+        # CRUD App with FastAPI
+'''--------------------------------------------'''
 
-from fastapi import FastAPI , status , HTTPException
-from fastapi.responses import JSONResponse
-
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import List, Optional
 
-import os
 import pandas as pd
 import json
 from datetime import datetime
 
-
+# Read the excel through pandas.
 df = pd.read_excel("Articles.xlsx")
-# print(df.head(2))
+
+# Define the Model : 
 
 app = FastAPI()
 excel_path = "Articles.xlsx"
-
-
-
-class Articles(BaseModel):
-    Article_Id : int
-
-
-class ArticleName(BaseModel):
-    Article_Name : str
-
-
-class ArticleDateCategory(BaseModel):
-    Article_Date : str
-    Category : str    
 
 
 class ArticlesData(BaseModel):
@@ -39,120 +26,117 @@ class ArticlesData(BaseModel):
     Article_Name : str 
     Article_Content : str
 
+#---------------------------------------------------------------------------------------
 
-# landing Screen : http://127.0.0.1:8000/
-@app.get("/")
-def read_root():
-    return {"Hello": "Bindu"}
+1.  #  Implement CREATE Operation : 
 
-# get method : http://127.0.0.1:8000/Articles
-@app.get("/Articles")
-def Articleslist_Get_Method():
-    return json.loads (df[["Article_Id","Article_Name"]].to_json(orient="records"))
+articles_list = []                      # In-memory list to store articles temporarily
 
+@app.post("/ArticlesCreate")
+def create_article(article: ArticlesData):
 
-# post method : http://127.0.0.1:8000/id/
-@app.post("/id/")
-def Article_Post_Method(Id: Articles):
-  filter_articlesContent =  json.loads(df[df['Article_Id'] == Id.Article_Id].to_json(orient="records"))
-  return {"Article Id " : filter_articlesContent[0].get("Article_Id"),
-          "Articles Content through Article Id" : filter_articlesContent[0].get("Article_Content")
-          }
+    # Add the new article to the list
+    articles_list.append(article.dict())
 
-# post method : AND operation : http://127.0.0.1:8000/dateandcategory/ 
-@app.post("/dateandcategory/")
-def Article_date_and_category(DateCategory: ArticleDateCategory):
-  filter_articles =  json.loads(df[(df['Article_Date'] == DateCategory.Article_Date) & 
-                                   (df['Category'] == DateCategory.Category)].to_json(orient="records"))
-  return {"Article Id" : filter_articles[0].get("Article_Id"),
-          "Article Date" : filter_articles[0].get("Article_Date"),
-          "Articles Content" : filter_articles[0].get("Article_Content") 
-          }
+    # Convert to DataFrame
+    df_new = pd.DataFrame(articles_list)
 
-# post method : OR operation : http://127.0.0.1:8000/dateorcategory/
-@app.post("/dateorcategory/")
-def Article_date_or_category(Date_or_Category: ArticleDateCategory):
-  filter_articles =  (df[(df['Article_Date'] == Date_or_Category.Article_Date) | 
-                                   (df['Category'] == Date_or_Category.Category)].to_json(orient="records"))
-  return json.loads(filter_articles)
+    # Save back to Excel (overwrites each time for simplicity)
+    df_new.to_excel(excel_path, index=True)
+    return {"message": "Article added successfully", "article": article}
 
-# post method : fix the date format : http://127.0.0.1:8000/datefixand/
-@app.post("/datefixand/")
-def Article_date_and_category_fix(DateCategory_and: ArticleDateCategory):
-  filter_articles =  json.loads(df[(df['Article_Date'] == DateCategory_and.Article_Date) & 
-                                   (df['Category'] == DateCategory_and.Category)].to_json(orient="records"))
-  for i in filter_articles:
-     i["Article_Date"] = ((datetime.fromtimestamp((i.get("Article_Date")) / 1000)).strftime("%d-%m-%Y"))
-     return  json.loads(json.dumps(filter_articles))
-     
-# post method : fix the date format : http://127.0.0.1:8000/datefixor/
-# Need to resolve........! logic is working only for 1st set of data.
-@app.post("/datefixor/")
-def Article_date_or_category_fix(DateCategoryfix: ArticleDateCategory):
-  filter_articles =  json.loads(df[(df['Article_Date'] == DateCategoryfix.Article_Date) |
-                                   (df['Category'] == DateCategoryfix.Category)].to_json(orient="records"))
-  for i in filter_articles:
-    # date_str = i.get("Article_Date")
-    # date = datetime.fromtimestamp(date) / 1000)
-    # formatted_date = date.strftime("%d-%m-%Y"))
-    # i["Article_Date"] = formatted_date
-    i["Article_Date"] = ((datetime.fromtimestamp((i.get("Article_Date")) / 1000)).strftime("%d-%m-%Y"))
-    return  {"output" : json.loads(json.dumps(filter_articles))}
-  
-# post method : fix the date format with List Comprhension method : http://127.0.0.1:8000/datefixLCusingand/
-@app.post("/datefixLCusingand/")
-def Article_date_and_category_lc(Date_Category: ArticleDateCategory):
-    filter_articles = df[(df['Article_Date'] == Date_Category.Article_Date) & (df['Category'] == Date_Category.Category)].to_json(orient='records')
-    parsed_list = json.loads(json.dumps([{**item, "Article_Date": datetime.fromtimestamp(item["Article_Date"] / 1000).strftime("%d-%m-%Y")}for item in json.loads(filter_articles)]))
-    return parsed_list
+#------------------------------------------------------------------------------------------------
 
-# post method : fix the date format with List Comprhension method : http://127.0.0.1:8000/datefixLCusingor/
-@app.post("/datefixLCusingor/")
-def Article_date_or_category_lc(DateCategoryfixlc: ArticleDateCategory):
-  filter_articles =  df[(df['Article_Date'] == DateCategoryfixlc.Article_Date) | (df['Category'] == DateCategoryfixlc.Category)].to_json(orient="records")
-  parsed_list = json.loads(json.dumps([{**item, "Article_Date": datetime.fromtimestamp(item["Article_Date"] / 1000).strftime("%d-%m-%Y")}for item in json.loads(filter_articles)]))
-  return parsed_list
+2.  # Implement READ Operation : 
 
-# post method : adding the status code and message using Exception handling with JSONResponse : http://127.0.0.1:8000/name/
-@app.post("/name/")
-def Article_Post_Method(A_Name: ArticleName):
-  try:
-      filter_articlesContent =  json.loads(df[df['Article_Name'] == A_Name.Article_Name].to_json(orient="records"))
-      return JSONResponse(status_code = status.HTTP_200_OK,
-                          content = {"status": "Success", "message": "Item processed",
-                                     "Article Name" : filter_articlesContent[0].get("Article_Name"),
-                                     "Articles Content" : filter_articlesContent[0].get("Article_Content")
-                                     }
-                                     )
-  except Exception as e:
-      return JSONResponse(status_code = status.HTTP_404_NOT_FOUND,
-            content = {"status": "failed", "message": str(e)}
-        )
-  
-# get query method : http://127.0.0.1:8000/ArticleGqp?article_id=1
-@app.get("/ArticleGqp")
+'''    2.1  # To get all Articles : '''
+
+@app.get("/ArticlesRead")
+def read_articles():
+    return json.loads(df.to_json(orient="records"))
+
+''''    2.2 # To get a Article by its ID : '''
+
+@app.get("/articles/{Article_Id}")
 def get_articles(article_id: Optional[int]):
         filtered_df = df[df["Article_Id"] == article_id]
         return json.loads(filtered_df[["Article_Id", "Article_Name"]].to_json(orient="records"))
 
+#----------------------------------------------------------------------------------------------------
 
-# read the Excel : http://127.0.0.1:8000/read/
-@app.get("/read/")
-def read_excel():
-    return json.loads(df.to_json(orient="records"))
+3. # Implement UPDATE Operation :
 
+'''     3.1 # Update the entire data in the row : '''
 
-# DELETE : 
-@app.delete("/delete/{Article_Id}")
+@app.put("/ArticlesUpdate")
+def update_article(article: ArticlesData):
+    try:
+        df = pd.read_excel(excel_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Excel file not found")
+
+    # Find row where Article_Id matches
+    match_index = df.index[df["Article_Id"] == article.Article_Id].tolist()
+
+    if not match_index:
+        raise HTTPException(status_code=404, detail="Article ID not found")
+
+    # Update the row
+    id = match_index[0]
+    df.loc[id, "Article_Date"] = article.Article_Date
+    df.loc[id, "Category"] = article.Category
+    df.loc[id, "Article_Name"] = article.Article_Name
+    df.loc[id, "Article_Content"] = article.Article_Content
+
+    # Save back to Excel
+    df.to_excel(excel_path, index=False)
+
+    return {"message": "Article updated successfully", "updated_article": article}
+
+'''     3.2 # Update the partial data in the row : '''
+
+@app.patch("/ArticlesPatch")
+def patch_article(update_data: ArticlesData):
+
+    # Find the row index :
+    id_list = df.index[df["Article_Id"] == update_data.Article_Id].tolist()
+    if not id_list:
+        raise HTTPException(status_code=404, detail="Article ID not found")
+    
+    id = id_list[0]
+
+    # Only update the fields that were provided
+    for field, value in update_data.dict(exclude_unset=True).items():
+        if field != "Article_Id" and value not in ["string", "", None]:
+            df.at[id, field] = value
+
+    # Save updated data
+    df.to_excel(excel_path, index=False)
+
+    # Get the full updated row 
+    updated_row = df.loc[id].to_dict()
+    print("Update data:", update_data.dict())
+    print("DataFrame columns:", df.columns.tolist())
+    return {"message": "Article partially updated", "updated_fields": updated_row}
+
+#----------------------------------------------------------------------------------------------------
+
+4. # Implement DELETE Operation :
+
+@app.delete("/ArticlesDelete/{Article_Id}")
 def delete_article(Article_Id: int):
+    # Find the row index
+    id_list = df.index[df["Article_Id"] == Article_Id].tolist()
     
-    excel_path = "Articles.xlsx"
-    df = pd.read_excel("Articles.xlsx")
-
-    if Article_Id not in df["Article_Id"].values:
-        return JSONResponse(status_code = 404, content = {"Details": "Article not found"})
+    if not id_list:
+        raise HTTPException(status_code=404, detail="Article ID not found")
     
-    df_data = df[df["Article_Id"] != Article_Id]
+    # Drop the row
+    df.drop(index=id_list[0], inplace=True)
+    
+    # Save updated data
+    df.to_excel(excel_path, index=False)
+    
+    return {"message": f"Article with ID {Article_Id} has been deleted."}
 
-    df_data.to_excel(excel_path, index=False)
-    return {"message": f"Article with ID {Article_Id} is deleted now"}
+#----------------------------------------------------------------------------------------------------
